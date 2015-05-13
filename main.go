@@ -54,6 +54,8 @@ type Host struct {
 func (h *Host) Address() string {
 	if h.Data.Address == "" {
 		return h.Data.Name
+	} else if h.Data.Netmask != 0 {
+		return fmt.Sprintf("%s/%d", h.Data.Address, h.Data.Netmask)
 	} else {
 		return h.Data.Address
 	}
@@ -63,6 +65,7 @@ type HostData struct {
 	Address string `json:"address"`
 	Comment string `json:"comment"`
 	Name    string `json:"name"`
+	Netmask int    `json:"netmask"`
 }
 
 type Service struct {
@@ -73,6 +76,8 @@ type Service struct {
 func (s *Service) Ports() string {
 	if s.Data.DstHigh == 0 {
 		return "1:65535"
+	} else if s.Data.DstHigh == s.Data.DstLow {
+		return fmt.Sprintf("%d", s.Data.DstLow)
 	} else {
 		return fmt.Sprintf("%d:%d", s.Data.DstLow, s.Data.DstHigh)
 	}
@@ -124,7 +129,7 @@ func ResolveRef(refstr string, target interface{}) {
 	ref := ConfdCommand(fmt.Sprintf("get_object %s", refstr))
 	err := json.Unmarshal(ToJSON(ref), &target)
 	if err != nil {
-		log.Fatalf("Error resolving REF: %s", refstr, err)
+		log.Fatalf("Error resolving REF %s: %v", refstr, err)
 	}
 }
 

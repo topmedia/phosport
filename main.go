@@ -15,12 +15,23 @@ type Rule struct {
 }
 
 func (r *Rule) ResolveRefs() {
-	// for src := range r.Data.Sources {
-	// }
-	// for dst := range r.Data.Destinations {
-	// }
-	// for svc := range r.Data.Services {
-	// }
+	for i, src := range r.Data.Sources {
+		var host Host
+		ResolveRef(src, &host)
+		r.Data.Sources[i] = host.Address()
+	}
+
+	for i, dst := range r.Data.Destinations {
+		var host Host
+		ResolveRef(dst, &host)
+		r.Data.Destinations[i] = host.Address()
+	}
+
+	for i, sv := range r.Data.Services {
+		var svc Service
+		ResolveRef(sv, &svc)
+		r.Data.Services[i] = svc.Ports()
+	}
 }
 
 type RuleData struct {
@@ -40,6 +51,14 @@ type Host struct {
 	Class string   `json:"class"`
 }
 
+func (h *Host) Address() string {
+	if h.Data.Address == "" {
+		return h.Data.Name
+	} else {
+		return h.Data.Address
+	}
+}
+
 type HostData struct {
 	Address string `json:"address"`
 	Comment string `json:"comment"`
@@ -49,6 +68,14 @@ type HostData struct {
 type Service struct {
 	Data  ServiceData `json:"data"`
 	Class string      `json:"class"`
+}
+
+func (s *Service) Ports() string {
+	if s.Data.DstHigh == 0 {
+		return "1:65535"
+	} else {
+		return fmt.Sprintf("%d:%d", s.Data.DstLow, s.Data.DstHigh)
+	}
 }
 
 type ServiceData struct {
@@ -71,6 +98,7 @@ func ToJSON(input []byte) []byte {
 	}
 
 	str := strings.Replace(string(input), " => ", ": ", -1)
+	str = strings.Replace(str, `"`, `\"`, -1)
 	str = strings.Replace(str, "'", `"`, -1)
 	str = vars.ReplaceAllStringFunc(str, fixquotes)
 	return []byte(str)
@@ -88,6 +116,18 @@ func ConfdCommand(cmd string) []byte {
 	return out
 }
 
+func ResolveRef(refstr string, target interface{}) {
+	if strings.HasPrefix(refstr, "$VAR") {
+		return
+	}
+
+	ref := ConfdCommand(fmt.Sprintf("get_object %s", refstr))
+	err := json.Unmarshal(ToJSON(ref), &target)
+	if err != nil {
+		log.Fatalf("Error resolving REF: %s", refstr, err)
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -100,6 +140,7 @@ func main() {
 	}
 
 	for _, rule := range rules {
+		rule.ResolveRefs()
 		log.Printf("Source: %v | Dest: %v | Services: %v", rule.Data.Sources, rule.Data.Destinations, rule.Data.Services)
 	}
 

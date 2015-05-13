@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -90,9 +91,17 @@ type ServiceData struct {
 	Name    string `json:"name"`
 }
 
+type RulePrint struct {
+	Sources      []string `json:"sources"`
+	Destinations []string `json:"destinations"`
+	Services     []string `json:"services"`
+}
+
 var (
 	host = flag.String("host", "192.168.1.1",
 		"UTM Hostname")
+	verbose = flag.Bool("v", false,
+		"Output all commands executed on UTM")
 )
 
 func ToJSON(input []byte) []byte {
@@ -109,10 +118,20 @@ func ToJSON(input []byte) []byte {
 	return []byte(str)
 }
 
-func ConfdCommand(cmd string) []byte {
-	log.Printf("Executing command %s on host %s", cmd, *host)
-	out, err := exec.Command("ssh", *host, "confd-client.plx",
-		cmd).Output()
+func ConfdCommand(cmd string) (out []byte) {
+	if *verbose {
+		log.Printf("Executing command %s on host %s", cmd, *host)
+	}
+
+	var err error
+
+	if *host == "localhost" {
+		out, err = exec.Command("confd-client.plx", cmd).
+			Output()
+	} else {
+		out, err = exec.Command("ssh", *host,
+			"confd-client.plx", cmd).Output()
+	}
 
 	if err != nil {
 		log.Fatalf("Error executing confd command: %s", err)
@@ -144,11 +163,22 @@ func main() {
 		log.Fatalf("Error parsing rules into JSON: %s", err)
 	}
 
+	rulesprint := make([]RulePrint, len(rules))
+
 	for _, rule := range rules {
 		rule.ResolveRefs()
-		log.Printf("Source: %v | Dest: %v | Services: %v", rule.Data.Sources, rule.Data.Destinations, rule.Data.Services)
+		rulesprint = append(rulesprint, RulePrint{
+			Sources:      rule.Data.Sources,
+			Destinations: rule.Data.Destinations,
+			Services:     rule.Data.Services,
+		})
 	}
 
-	// log.Printf("Rules: %#v", rules)
+	out, err := json.MarshalIndent(rulesprint, "", "  ")
 
+	if err != nil {
+		log.Fatalf("Error preparing output JSON: %v", err)
+	}
+
+	os.Stdout.Write(out)
 }

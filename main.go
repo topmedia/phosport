@@ -11,6 +11,15 @@ import (
 	"strings"
 )
 
+var (
+	host = flag.String("host", "localhost",
+		"UTM Hostname")
+	verbose = flag.Bool("v", false,
+		"Output all commands executed on UTM")
+)
+
+const cc = "confd-client.plx"
+
 type Rule struct {
 	Data RuleData `json:"data"`
 }
@@ -97,13 +106,6 @@ type RulePrint struct {
 	Services     []string `json:"services"`
 }
 
-var (
-	host = flag.String("host", "192.168.1.1",
-		"UTM Hostname")
-	verbose = flag.Bool("v", false,
-		"Output all commands executed on UTM")
-)
-
 func ToJSON(input []byte) []byte {
 	vars := regexp.MustCompile(`(\$VAR[^,]+),`)
 	fixquotes := func(m string) string {
@@ -118,23 +120,25 @@ func ToJSON(input []byte) []byte {
 	return []byte(str)
 }
 
-func ConfdCommand(cmd string) (out []byte) {
+func ConfdCommand(cmds ...string) (out []byte) {
 	if *verbose {
-		log.Printf("Executing command %s on host %s", cmd, *host)
+		log.Printf("Executing command %v on host %s", cmds, *host)
 	}
 
-	var err error
+	cmd := exec.Command(cc, cmds...)
 
-	if *host == "localhost" {
-		out, err = exec.Command("confd-client.plx", cmd).
-			Output()
-	} else {
-		out, err = exec.Command("ssh", *host,
-			"confd-client.plx", cmd).Output()
+	if *host != "localhost" {
+		if len(cmds) > 1 {
+			cmds[1] = fmt.Sprintf("'%s'", cmds[1])
+		}
+		cmds = append([]string{*host, cc}, cmds...)
+		cmd = exec.Command("ssh", cmds...)
 	}
+
+	out, err := cmd.Output()
 
 	if err != nil {
-		log.Fatalf("Error executing confd command: %s", err)
+		log.Fatalf("Error executing confd command: %s %s", err, out)
 	}
 
 	return out
@@ -145,7 +149,7 @@ func ResolveRef(refstr string, target interface{}) {
 		return
 	}
 
-	ref := ConfdCommand(fmt.Sprintf("get_object %s", refstr))
+	ref := ConfdCommand("get_object", refstr)
 	err := json.Unmarshal(ToJSON(ref), &target)
 	if err != nil {
 		log.Fatalf("Error resolving REF %s: %v", refstr, err)
@@ -155,7 +159,7 @@ func ResolveRef(refstr string, target interface{}) {
 func main() {
 	flag.Parse()
 
-	pkf := ConfdCommand(`get_objects_filtered '$_->{type} eq "packetfilter"'`)
+	pkf := ConfdCommand("get_objects_filtered", `$_->{type} eq "packetfilter"`)
 
 	var rules []Rule
 	err := json.Unmarshal(ToJSON(pkf), &rules)

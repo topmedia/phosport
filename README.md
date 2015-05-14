@@ -19,6 +19,44 @@ If you specify the `-v` command-line flag, all commands executed by phosport wil
   -v=false: Output all commands executed on UTM
 ~~~
 
+## Caveats
+
+* There's no support for resolving groups yet. This is forthcoming.
+* If your rulebase uses dynamic user objects those will be output with their respective names as there is no IP attached to those objects
+
+## Sample Output
+
+~~~json
+[
+  {
+    "sources": [
+      "10.0.0.200"
+    ],
+    "destinations": [
+      "192.168.1.12"
+    ],
+    "services": [
+      "5060"
+    ]
+  },
+  {
+    "sources": [
+      "192.168.1.0/24",
+      "172.16.198.0/24"
+    ],
+    "destinations": [
+      "192.168.1.0/24",
+      "172.17.198.0/24",
+      "172.21.16.0/24",
+      "172.16.198.0/24"
+    ],
+    "services": [
+      "1:65535"
+    ]
+  }
+]
+  ~~~
+
 ## Building
 
 Assuming a proper `GOPATH` is set, building phosport is mainly a matter of executing:

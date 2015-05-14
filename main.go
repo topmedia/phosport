@@ -20,133 +20,8 @@ var (
 
 const cc = "confd-client.plx"
 
-type Rule struct {
-	Data         RuleData `json:"data"`
-	Destinations []string `json:"-"`
-	Sources      []string `json:"-"`
-	Services     []string `json:"-"`
-}
-
-func (r *Rule) ResolveRefs() {
-	for _, src := range r.Data.Sources {
-		var host Host
-		ResolveRef(src, &host)
-		for _, h := range host.MembersAndSelf() {
-			r.Sources = append(r.Sources, h.Address())
-		}
-	}
-
-	for _, dst := range r.Data.Destinations {
-		var host Host
-		ResolveRef(dst, &host)
-		for _, h := range host.MembersAndSelf() {
-			r.Destinations = append(r.Destinations, h.Address())
-		}
-	}
-
-	for _, sv := range r.Data.Services {
-		var svc Service
-		ResolveRef(sv, &svc)
-		for _, h := range svc.MembersAndSelf() {
-			r.Services = append(r.Services, h.Ports())
-		}
-	}
-}
-
-type RuleData struct {
-	Action       string   `json:"action"`
-	Comment      string   `json:"comment"`
-	Destinations []string `json:"destinations"`
-	Group        string   `json:"group"`
-	Interface    string   `json:"interface"`
-	Name         string   `json:"name"`
-	Services     []string `json:"services"`
-	Sources      []string `json:"sources"`
-	Status       int      `json:"status"`
-}
-
-type Host struct {
-	Data  HostData `json:"data"`
-	Class string   `json:"class"`
-	Type  string   `json:"type"`
-}
-
-func (h *Host) Address() string {
-	if h.Data.Address == "" {
-		return h.Data.Name
-	} else if h.Data.Netmask != 0 {
-		return fmt.Sprintf("%s/%d", h.Data.Address, h.Data.Netmask)
-	} else {
-		return h.Data.Address
-	}
-}
-
-func (h *Host) MembersAndSelf() (hosts []Host) {
-	if h.Type != "group" {
-		return append(hosts, *h)
-	}
-
-	for _, m := range h.Data.Members {
-		var h Host
-		ResolveRef(m, &h)
-		hosts = append(hosts, h)
-	}
-
-	return hosts
-}
-
-type HostData struct {
-	Address string   `json:"address"`
-	Comment string   `json:"comment"`
-	Name    string   `json:"name"`
-	Netmask int      `json:"netmask"`
-	Members []string `json:"members"`
-}
-
-type Service struct {
-	Data  ServiceData `json:"data"`
-	Class string      `json:"class"`
-	Type  string      `json:"type"`
-}
-
-func (s *Service) Ports() string {
-	if s.Data.DstHigh == 0 {
-		return "1:65535"
-	} else if s.Data.DstHigh == s.Data.DstLow {
-		return fmt.Sprintf("%d", s.Data.DstLow)
-	} else {
-		return fmt.Sprintf("%d:%d", s.Data.DstLow, s.Data.DstHigh)
-	}
-}
-
-func (s *Service) MembersAndSelf() (services []Service) {
-	if s.Type != "group" {
-		return append(services, *s)
-	}
-
-	for _, m := range s.Data.Members {
-		var s Service
-		ResolveRef(m, &s)
-		services = append(services, s)
-	}
-
-	return services
-}
-
-type ServiceData struct {
-	DstHigh int      `json:"dst_high"`
-	DstLow  int      `json:"dst_low"`
-	Comment string   `json:"comment"`
-	Name    string   `json:"name"`
-	Members []string `json:"members"`
-}
-
-type RulePrint struct {
-	Sources      []string `json:"sources"`
-	Destinations []string `json:"destinations"`
-	Services     []string `json:"services"`
-}
-
+// Convert the confd-client output to "real" JSON
+// with double quotes and colons
 func ToJSON(input []byte) []byte {
 	vars := regexp.MustCompile(`(\$VAR[^,]+),`)
 	fixquotes := func(m string) string {
@@ -161,6 +36,7 @@ func ToJSON(input []byte) []byte {
 	return []byte(str)
 }
 
+// Execute a confd-client command either locally or remotely
 func ConfdCommand(cmds ...string) (out []byte) {
 	if *verbose {
 		log.Printf("Executing command %v on host %s", cmds, *host)
@@ -185,6 +61,7 @@ func ConfdCommand(cmds ...string) (out []byte) {
 	return out
 }
 
+// Resolves a REF_ string to an object
 func ResolveRef(refstr string, target interface{}) {
 	if strings.HasPrefix(refstr, "$VAR") {
 		return

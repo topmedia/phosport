@@ -21,26 +21,35 @@ var (
 const cc = "confd-client.plx"
 
 type Rule struct {
-	Data RuleData `json:"data"`
+	Data         RuleData `json:"data"`
+	Destinations []string `json:"-"`
+	Sources      []string `json:"-"`
+	Services     []string `json:"-"`
 }
 
 func (r *Rule) ResolveRefs() {
-	for i, src := range r.Data.Sources {
+	for _, src := range r.Data.Sources {
 		var host Host
 		ResolveRef(src, &host)
-		r.Data.Sources[i] = host.Address()
+		for _, h := range host.MembersAndSelf() {
+			r.Sources = append(r.Sources, h.Address())
+		}
 	}
 
-	for i, dst := range r.Data.Destinations {
+	for _, dst := range r.Data.Destinations {
 		var host Host
 		ResolveRef(dst, &host)
-		r.Data.Destinations[i] = host.Address()
+		for _, h := range host.MembersAndSelf() {
+			r.Destinations = append(r.Destinations, h.Address())
+		}
 	}
 
-	for i, sv := range r.Data.Services {
+	for _, sv := range r.Data.Services {
 		var svc Service
 		ResolveRef(sv, &svc)
-		r.Data.Services[i] = svc.Ports()
+		for _, h := range svc.MembersAndSelf() {
+			r.Services = append(r.Services, h.Ports())
+		}
 	}
 }
 
@@ -59,6 +68,7 @@ type RuleData struct {
 type Host struct {
 	Data  HostData `json:"data"`
 	Class string   `json:"class"`
+	Type  string   `json:"type"`
 }
 
 func (h *Host) Address() string {
@@ -71,16 +81,32 @@ func (h *Host) Address() string {
 	}
 }
 
+func (h *Host) MembersAndSelf() (hosts []Host) {
+	if h.Type != "group" {
+		return append(hosts, *h)
+	}
+
+	for _, m := range h.Data.Members {
+		var h Host
+		ResolveRef(m, &h)
+		hosts = append(hosts, h)
+	}
+
+	return hosts
+}
+
 type HostData struct {
-	Address string `json:"address"`
-	Comment string `json:"comment"`
-	Name    string `json:"name"`
-	Netmask int    `json:"netmask"`
+	Address string   `json:"address"`
+	Comment string   `json:"comment"`
+	Name    string   `json:"name"`
+	Netmask int      `json:"netmask"`
+	Members []string `json:"members"`
 }
 
 type Service struct {
 	Data  ServiceData `json:"data"`
 	Class string      `json:"class"`
+	Type  string      `json:"type"`
 }
 
 func (s *Service) Ports() string {
@@ -93,11 +119,26 @@ func (s *Service) Ports() string {
 	}
 }
 
+func (s *Service) MembersAndSelf() (services []Service) {
+	if s.Type != "group" {
+		return append(services, *s)
+	}
+
+	for _, m := range s.Data.Members {
+		var s Service
+		ResolveRef(m, &s)
+		services = append(services, s)
+	}
+
+	return services
+}
+
 type ServiceData struct {
-	DstHigh int    `json:"dst_high"`
-	DstLow  int    `json:"dst_low"`
-	Comment string `json:"comment"`
-	Name    string `json:"name"`
+	DstHigh int      `json:"dst_high"`
+	DstLow  int      `json:"dst_low"`
+	Comment string   `json:"comment"`
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
 }
 
 type RulePrint struct {
@@ -150,7 +191,8 @@ func ResolveRef(refstr string, target interface{}) {
 	}
 
 	ref := ConfdCommand("get_object", refstr)
-	err := json.Unmarshal(ToJSON(ref), &target)
+	err := json.Unmarshal(ToJSON([]byte(ref)), &target)
+
 	if err != nil {
 		log.Fatalf("Error resolving REF %s: %v", refstr, err)
 	}
@@ -167,14 +209,18 @@ func main() {
 		log.Fatalf("Error parsing rules into JSON: %s", err)
 	}
 
+	if *verbose {
+		log.Printf("Found %d rules, resolving objects",
+			len(rules))
+	}
 	rulesprint := make([]RulePrint, len(rules))
 
 	for _, rule := range rules {
 		rule.ResolveRefs()
 		rulesprint = append(rulesprint, RulePrint{
-			Sources:      rule.Data.Sources,
-			Destinations: rule.Data.Destinations,
-			Services:     rule.Data.Services,
+			Sources:      rule.Sources,
+			Destinations: rule.Destinations,
+			Services:     rule.Services,
 		})
 	}
 

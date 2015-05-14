@@ -21,7 +21,6 @@ If you specify the `-v` command-line flag, all commands executed by phosport wil
 
 ## Caveats
 
-* There's no support for resolving groups yet. This is forthcoming.
 * If your rulebase uses dynamic user objects those will be output with their respective names as there is no IP attached to those objects
 
 ## Sample Output

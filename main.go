@@ -16,6 +16,18 @@ var (
 		"UTM Hostname")
 	verbose = flag.Bool("v", false,
 		"Output all commands executed on UTM")
+	resolve = flag.Bool("resolve", false,
+		"When exporting rules, resolve all the REFs")
+	rules = flag.Bool("rules", false,
+		"This output mode exports all packetfilter rules")
+	hostgroups = flag.Bool("hostgroups", false,
+		"This output mode exports all host groups")
+	hosts = flag.Bool("hosts", false,
+		"This output mode exports all hosts")
+	services = flag.Bool("services", false,
+		"This output mode exports all services")
+	servicegroups = flag.Bool("servicegroups", false,
+		"This output mode exports all service groups")
 )
 
 const cc = "confd-client.plx"
@@ -75,37 +87,31 @@ func ResolveRef(refstr string, target interface{}) {
 	}
 }
 
-func main() {
-	flag.Parse()
-
-	pkf := ConfdCommand("get_objects_filtered", `$_->{type} eq "packetfilter"`)
-
-	var rules []Rule
-	err := json.Unmarshal(ToJSON(pkf), &rules)
-	if err != nil {
-		log.Fatalf("Error parsing rules into JSON: %s", err)
-	}
-
-	if *verbose {
-		log.Printf("Found %d rules, resolving objects",
-			len(rules))
-	}
-	rulesprint := make([]RulePrint, len(rules))
-
-	for _, rule := range rules {
-		rule.ResolveRefs()
-		rulesprint = append(rulesprint, RulePrint{
-			Sources:      rule.Sources,
-			Destinations: rule.Destinations,
-			Services:     rule.Services,
-		})
-	}
-
-	out, err := json.MarshalIndent(rulesprint, "", "  ")
+func OutputJSON(objs interface{}) {
+	out, err := json.MarshalIndent(objs, "", "  ")
 
 	if err != nil {
 		log.Fatalf("Error preparing output JSON: %v", err)
 	}
 
 	os.Stdout.Write(out)
+}
+
+func main() {
+	flag.Parse()
+
+	if *rules {
+		OutputJSON(ExportRules(*resolve))
+	} else if *hostgroups {
+		OutputJSON(ExportGroups("network"))
+	} else if *hosts {
+		OutputJSON(ExportHosts())
+	} else if *servicegroups {
+		OutputJSON(ExportGroups("service"))
+	} else if *services {
+		OutputJSON(ExportServices())
+	} else {
+		fmt.Println("Please choose a mode to export.\n\nUsage:")
+		flag.PrintDefaults()
+	}
 }

@@ -1,5 +1,10 @@
 package main
 
+import (
+	"encoding/json"
+	"log"
+)
+
 type Rule struct {
 	Data         RuleData `json:"data"`
 	Destinations []string `json:"-"`
@@ -15,6 +20,7 @@ func (r *Rule) ResolveRefs() {
 			r.Sources = append(r.Sources, h.Address())
 		}
 	}
+	r.Data.Sources = r.Sources
 
 	for _, dst := range r.Data.Destinations {
 		var host Host
@@ -23,6 +29,7 @@ func (r *Rule) ResolveRefs() {
 			r.Destinations = append(r.Destinations, h.Address())
 		}
 	}
+	r.Data.Destinations = r.Destinations
 
 	for _, sv := range r.Data.Services {
 		var svc Service
@@ -31,6 +38,7 @@ func (r *Rule) ResolveRefs() {
 			r.Services = append(r.Services, h.Ports())
 		}
 	}
+	r.Data.Services = r.Services
 }
 
 type RuleData struct {
@@ -49,4 +57,24 @@ type RulePrint struct {
 	Sources      []string `json:"sources"`
 	Destinations []string `json:"destinations"`
 	Services     []string `json:"services"`
+}
+
+func ExportRules(resolve bool) []RuleData {
+	pkf := ConfdCommand("get_objects_filtered", `$_->{type} eq "packetfilter"`)
+
+	var rules []Rule
+	err := json.Unmarshal(ToJSON(pkf), &rules)
+	if err != nil {
+		log.Fatalf("Error parsing rules into JSON: %s", err)
+	}
+
+	rulesprint := make([]RuleData, len(rules))
+
+	for _, rule := range rules {
+		if resolve {
+			rule.ResolveRefs()
+		}
+		rulesprint = append(rulesprint, rule.Data)
+	}
+	return rulesprint
 }

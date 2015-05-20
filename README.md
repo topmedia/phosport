@@ -1,12 +1,12 @@
 # phosport
 
 phosport (So*phos* Ex*port*) is a Go utility to query the built-in confd storage of [Sophos UTM](https://www.sophos.com/en-us/products/unified-threat-management.aspx) appliances and export 
-the set of packet filter rules along with the respective network and service objects to a JSON format. The internal
+the set of network objects and packet filter rules along with the respective network and service objects to a JSON format. The internal
 reference objects are resolved and output as plain IPs or network/netmask combinations. 
 
 ## Usage
 
-There are two modes implemented: If a `-host` flag is given that is not `localhost`, phosport will connect to the
+There are two query modes implemented: If a `-host` flag is given that is not `localhost`, phosport will connect to the
 target host via SSH (repeatedly; please set-up public key authentication beforehand).
 
 Otherwise, `confd-client.plx` will be executed on the local machine, assuming you have copied the binary to the target UTM (e.g.
@@ -19,42 +19,82 @@ If you specify the `-v` command-line flag, all commands executed by phosport wil
   -v=false: Output all commands executed on UTM
 ~~~
 
+Output modes:
+
+~~~
+  -hostgroups    This output mode exports all host groups
+  -hosts         This output mode exports all hosts
+  -rules         This output mode exports all packetfilter rules
+  -servicegroups This output mode exports all service groups
+  -services      This output mode exports all services
+~~~
+
+The special `-resolve` argument only works with the `-rules` output mode and resolves all internal REFs to the corresponding objects and also all groups to their respective members.
+
 ## Caveats
 
 * If your rulebase uses dynamic user objects those will be output with their respective names as there is no IP attached to those objects
 
-## Sample Output
+## Sample Output for `-rules -resolve`
 
 ~~~json
 [
   {
-    "sources": [
-      "10.0.0.200"
-    ],
+    "action": "accept",
+    "comment": "",
     "destinations": [
-      "192.168.1.12"
+      "0.0.0.0"
     ],
-    "services": [
-      "5060"
-    ]
-  },
-  {
-    "sources": [
-      "192.168.1.0/24",
-      "172.16.198.0/24"
-    ],
-    "destinations": [
-      "192.168.1.0/24",
-      "172.17.198.0/24",
-      "172.21.16.0/24",
-      "172.16.198.0/24"
-    ],
+    "group": "Outbound",
+    "interface": "",
+    "name": "Any from Topmedia Gast (Network) to Internet",
     "services": [
       "1:65535"
-    ]
+    ],
+    "sources": [
+      "172.16.28.0/24"
+    ],
+    "status": 1
   }
 ]
-  ~~~
+~~~
+
+## Sample Output for `-hosts`
+
+~~~
+[
+  {
+    "address": "172.17.198.3",
+    "comment": "",
+    "hostnames": [
+      "xn2a8124f79158b7"
+    ],
+    "macs": [
+      "6c:98:eb:00:0b:40"
+    ],
+    "name": "Ocedo G50",
+    "netmask": 0,
+    "interface": "",
+    "ref": "REF_NetHosOcedoG50"
+  }
+]
+~~~
+ 
+## Sample Output for `-services`
+
+~~~
+  {
+    "dst_high": 3306,
+    "dst_low": 3306,
+    "comment": "MySQL Database Service",
+    "name": "MySQL",
+    "src_high": 65535,
+    "src_low": 1,
+    "ref": "REF_sDdolLNxJK",
+    "protocol": "tcp"
+  }
+]
+~~~
 
 ## Building
 
